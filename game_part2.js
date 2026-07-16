@@ -38,6 +38,38 @@ function renderBoard() {
     document.getElementById('white-death-display').innerText = gameState.deadEliteBelievers.white;
     document.getElementById('black-death-display').innerText = gameState.deadEliteBelievers.black;
     document.getElementById('apocalypse-status').innerText = gameState.isApocalypseMode ? `【覚醒中 残り${gameState.apocalypseTimer}T】` : "";
+    // 💡 【追加】持ち駒用UIエレメントがなければHTMLに自動作成
+    let reserveEl = document.getElementById('reserve-panel');
+    if (!reserveEl) {
+        reserveEl = document.createElement('div');
+        reserveEl.id = 'reserve-panel';
+        reserveEl.style.cssText = "margin-top:15px; background:#222; padding:10px; border-radius:8px; border:1px solid #444; width:720px; display:flex; gap:10px; justify-content:center; align-items:center; font-size:13px;";
+        document.body.appendChild(reserveEl);
+    }
+    
+    // 持ち駒UIの描画リフレッシュ
+    reserveEl.innerHTML = `<div>【持ち駒】</div>`;
+    let currentReserves = gameState.capturedPieces[gameState.turnOwner];
+    
+    if (currentReserves.length === 0) {
+        reserveEl.innerHTML += `<div style="color:#666;">（なし）</div>`;
+    } else {
+        currentReserves.forEach((piece, index) => {
+            let pBtn = document.createElement('button');
+            pBtn.innerText = piece.type;
+            pBtn.style.cssText = "background:#34495e; border:1px solid #555; padding:4px 8px; color:white; border-radius:4px; cursor:pointer;";
+            // 💡 現在選択中の持ち駒ならハイライト
+            if (selectedCell && selectedCell[0] === 'reserve' && selectedCell[1] === index) {
+                pBtn.style.background = "#f1c40f";
+                pBtn.style.color = "#000";
+            }
+            pBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // 盤面クリックとの衝突防止
+                onReserveClick(index);
+            });
+            reserveEl.appendChild(pBtn);
+        });
+    }
 }
 
 function inBounds(x, y) {
@@ -55,6 +87,18 @@ function onPieceDestroyed(p) {
         return;
     }
 
+    // 💡 【追加】倒した駒を持ち駒に加える（狂信者以上の場合はレベル0の「信徒」に戻す）
+    if (gameState.gameActive) {
+        let captured = {
+            type: p.type,
+            color: gameState.turnOwner, // 💡 所有権を「倒した側」の色に変える
+            evolutionLevel: p.type === "信徒" ? 0 : 0, // 信徒はレベル0にリセット
+            hasMoved: false
+        };
+        gameState.capturedPieces[gameState.turnOwner].push(captured);
+        logMessage(`【持ち駒】${gameState.turnOwner === 'white' ? '白' : '黒'}が[${p.type}]を鹵獲しました。`);
+    }
+
     if (p.type === "信徒" && p.evolutionLevel >= 1) {
         gameState.deadEliteBelievers[p.color]++;
         if (gameState.deadEliteBelievers[p.color] >= 2) {
@@ -65,23 +109,50 @@ function onPieceDestroyed(p) {
     }
 }
 
-// 無限外周縮小システム
+// ==========================================
+// 【修正版】無限外周縮小システム（フリーズ・無限ループ対策）
+// ==========================================
 function shrinkBoard() {
+    // 💡 縮小処理がすでに実行中であれば、重複して実行しないようにガードする
+    if (gameState.isShrinking) return;
+    gameState.isShrinking = true;
+
     let min = gameState.minLimit;
     let max = gameState.maxLimit;
-
-    for (let i = 0; i < BOARD_SIZE; i++) {
-        if (board[min][i] && board[min][i] !== -1) onPieceDestroyed(board[min][i]);
-        if (board[max][i] && board[max][i] !== -1) onPieceDestroyed(board[max][i]);
-        if (board[i][min] && board[i][min] !== -1) onPieceDestroyed(board[i][min]);
-        if (board[i][max] && board[i][max] !== -1) onPieceDestroyed(board[i][max]);
-        board[min][i] = board[max][i] = board[i][min] = board[i][max] = -1;
+    
+    // 重複を避けて外周の座標を厳密にリストアップ
+    let targetCells = new Set();
+    for (let i = min; i <= max; i++) {
+        targetCells.add(`${min},${i}`); // 上辺
+        targetCells.add(`${max},${i}`); // 下辺
+        targetCells.add(`${i},${min}`); // 左辺
+        targetCells.add(`${i},${max}`); // 右辺
     }
+
+    // リストアップした外周マスの駒を処理
+    targetCells.forEach(coord => {
+        let [x, y] = coord.split(',').map(Number);
+        let p = board[y][x];
+        if (p && p !== -1) {
+            // 💡 縮小の巻き込みで死んだ狂信者は、次の縮小を引き起こさないようにフラグで守る
+            if (p.type === "信徒" && p.evolutionLevel >= 1) {
+                logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
+                // 狂信者の死亡カウントを増やさず、ただ消滅させる（連鎖フリーズを防ぐ）
+            } else {
+                onPieceDestroyed(p);
+            }
+        }
+        board[y][x] = -1;
+    });
 
     gameState.minLimit++;
     gameState.maxLimit--;
+    
+    // 💡 縮小処理が安全に完了したので、ガードを解除する
+    gameState.isShrinking = false;
     renderBoard();
 }
+
 
 // 手番（ターン）経過処理
 function advanceTurn() {
@@ -101,10 +172,39 @@ function advanceTurn() {
 }
 
 // マスクリック・移動・スコア完全加算処理
+// ==========================================
+// 【修正】onCellClick の先頭部分（通信・持ち駒エラーの解消）
+// ==========================================
 function onCellClick(x, y) {
     if (!gameState.gameActive) return;
 
-    if (movableCells.some(([mx, my]) => mx === x && my === y)) {
+// 💡 game_part2.js 内の onCellClick(x, y) の先頭にある3行を以下に書き換え
+if (gameChannel && gameState.turnOwner !== myColor) {
+    logMessage("【警告】相手の手番です。");
+    return;
+}
+
+    // 💡 持ち駒を盤面に「打つ」時の配置処理（判定エラーの修正）
+    if (selectedCell && selectedCell[0] === 'reserve') {
+        if (movableCells.some(([mx, my]) => mx === x && my === y)) {
+            let reserveIndex = selectedCell[1];
+            let piece = gameState.capturedPieces[gameState.turnOwner][reserveIndex];
+            
+            board[y][x] = piece;
+            gameState.capturedPieces[gameState.turnOwner].splice(reserveIndex, 1);
+            
+            selectedCell = null;
+            movableCells = [];
+            logMessage(`【配置】[${piece.type}]を盤面に召喚しました。`);
+            
+            advanceTurn();
+            sendMove();
+            return;
+        }
+    }
+
+    // 💡 通常の駒の移動処理（selectedCellが配列のときだけ判定するようにガード）
+    if (Array.isArray(selectedCell) && selectedCell[0] !== 'reserve' && movableCells.some(([mx, my]) => mx === x && my === y)) {
         let [sx, sy] = selectedCell;
         let p = board[sy][sx];
         let t = board[y][x];
@@ -114,22 +214,21 @@ function onCellClick(x, y) {
             gameState.playerScores[gameState.turnOwner] += scoreValue;
             onPieceDestroyed(t);
 
-            if (gameState.apocalypseTriggeredTurn === 0 && gameState.playerScores[gameState.turnOwner] >= 20) {
+            if (gameState.playerScores[gameState.turnOwner] >= 20) {
                 gameState.isApocalypseMode = true;
                 gameState.apocalypseTimer = 3;
                 gameState.apocalypseTriggeredTurn = gameState.currentTurn;
+                gameState.playerScores[gameState.turnOwner] = 0; 
+                
                 for (let r of board) {
                     for (let c of r) {
-                        if (c && c.type === "信徒" && c.evolutionLevel === 0) c.evolutionLevel = 1;
+                        if (c && c.type === "信徒" && c.evolutionLevel === 0 && c.color === gameState.turnOwner) {
+                            c.evolutionLevel = 1;
+                        }
                     }
                 }
-                logMessage(`【アポカリプス発動】3手限定の全体覚醒！これより4ターン後に最初の外周縮小が発生します。`);
+                logMessage(`【アポカリプス発動】3手限定の全体覚醒！${gameState.turnOwner === 'white' ? '白' : '黒'}のスコアが0にリセットされました。`);
             }
-        }
-
-        if (p.type === "信徒" && gameState.isApocalypseMode && p.evolutionLevel < 3) {
-            p.evolutionLevel++;
-            logMessage(`【降臨】使徒が永久進化しました！`);
         }
 
         p.hasMoved = true;
@@ -143,6 +242,7 @@ function onCellClick(x, y) {
         return;
     }
 
+    // 駒の選択処理
     let c = board[y][x];
     if (c && c !== -1 && c.color === gameState.turnOwner) {
         selectedCell = [x, y];
@@ -159,6 +259,42 @@ function onCellClick(x, y) {
     }
 }
 
+function onReserveClick(index) {
+    if (!gameState.gameActive) return;
+    if (peer && conn && conn.open && gameState.turnOwner !== myColor) return;
+
+    // すでに選択中なら解除、そうでなければ選択
+    if (selectedCell && selectedCell[0] === 'reserve' && selectedCell[1] === index) {
+        selectedCell = null;
+        movableCells = [];
+        renderBoard();
+        return;
+    }
+
+    selectedCell = ['reserve', index];
+    movableCells = [];
+
+    // 💡 「真ん中（y=8）よりも自陣側」かつ「空マス」かつ「消滅していないマス」を打てるマスとしてリストアップ
+    // 白(white)は下半分（yが9〜16）、黒(black)は上半分（yが0〜7）
+    for (let y = gameState.minLimit; y <= gameState.maxLimit; y++) {
+        for (let x = gameState.minLimit; x <= gameState.maxLimit; x++) {
+            if (board[y][x] === 0) { // 空マス限定
+                if (gameState.turnOwner === 'white' && y >= 9) {
+                    movableCells.push([x, y]);
+                } else if (gameState.turnOwner === 'black' && y <= 7) {
+                    movableCells.push([x, y]);
+                }
+            }
+        }
+    }
+
+    renderBoard();
+
+    // 打てるマスを緑色にハイライト
+    movableCells.forEach(([mx, my]) => {
+        document.querySelector(`[data-x='${mx}'][data-y='${my}']`)?.classList.add('movable');
+    });
+}
 function logMessage(m) {
     let el = document.getElementById('log');
     if (el) {
@@ -166,11 +302,3 @@ function logMessage(m) {
         el.scrollTop = el.scrollHeight;
     }
 }
-
-// 起動スイッチ
-window.onload = function() {
-    document.getElementById('my-role').innerText = "対面マルチプレイ（1台操作）";
-    initBoardData();
-    renderBoard();
-    initNetwork();
-};
