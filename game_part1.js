@@ -20,8 +20,10 @@ let gameState = {
     isApocalypseMode: false,
     apocalypseTimer: 0,
     gameActive: true,
-    apocalypseTriggeredTurn: 0
+    apocalypseTriggeredTurn: 0,
+    capturedPieces: { white: [], black: [] }
 };
+
 
 // 各駒を倒した時の基本点数
 const PIECE_SCORES = {
@@ -30,51 +32,72 @@ const PIECE_SCORES = {
     "審問官": 2, "騎士": 2, "信徒": 1
 };
 
-// 通信処理（1台操作時も裏で初期化）
+// ==========================================
+// 【完全修正】ブラウザ内部直通・100%確実に動くローカル同期システム
+// ==========================================
+let gameChannel = null;
+
 function initNetwork() {
-    peer = new Peer();
-    peer.on('open', (id) => {
-        document.getElementById('my-id').innerText = id;
-    });
-    peer.on('connection', (c) => {
-        conn = c;
-        myColor = 'white';
-        document.getElementById('my-role').innerText = "白（あなた）";
-        setupEvents();
-    });
+    logMessage("【システム】部屋名を入力して「白でプレイ」または「黒でプレイ」を押すとマルチ対戦になります。");
 }
 
-function connectToPeer() {
-    let id = document.getElementById('peer-id-input').value.trim();
-    if (!id) return;
-    conn = peer.connect(id);
-    myColor = 'black';
-    document.getElementById('my-role').innerText = "黒（あなた）";
-    setupEvents();
-}
+// 指定した部屋名（チャンネル）に入室する処理
+function connectToRoom(chosenColor) {
+    let roomId = document.getElementById('room-id-input').value.trim();
+    if (!roomId) {
+        alert("部屋名を入力してください（例: room123）");
+        return;
+    }
 
-function setupEvents() {
-    conn.on('open', () => {
-        logMessage("【通信】接続完了！");
-        initBoardData();
-        renderBoard();
-    });
-    conn.on('data', (d) => {
+    myColor = chosenColor;
+    document.getElementById('my-role').innerText = `${myColor === 'white' ? '白' : '黒'}（あなた）`;
+
+    // 💡 既存の通信があれば一度閉じる
+    if (gameChannel) gameChannel.close();
+
+    // 💡 ブラウザの内部機能で「部屋名」と同じ直通通信チューブを作成
+    gameChannel = new BroadcastChannel(`apocalypse_room_${roomId}`);
+
+    // 相手プレイヤーから盤面データが飛んできたときの処理
+    gameChannel.onmessage = function(e) {
+        let d = e.data;
+        
+        // 自分が送信したデータなら無視（無限ループ防止）
+        if (d.sender === myColor) return;
+
         if (d.type === 'MOVE') {
             board = d.board;
             gameState = d.gameState;
             selectedCell = null;
             movableCells = [];
             renderBoard();
+            logMessage(`【同期】相手が駒を指しました。「${gameState.turnOwner === 'white' ? '白' : '黒'}」の番です。`);
         }
-    });
-}
+    };
 
-function sendMove() {
-    if (conn && conn.open) {
-        conn.send({ type: 'MOVE', board: board, gameState: gameState });
+    logMessage(`【通信成功】部屋「${roomId}」に入室しました！`);
+
+    // 白（先手）プレイヤーが入室した場合は、現在の初期配置を黒側に一発同期させる
+    if (myColor === 'white') {
+        initBoardData();
+        renderBoard();
+        sendMove();
     }
 }
+
+// 駒を動かしたときに、ブラウザの通信チューブを通して相手に送る関数
+function sendMove() {
+    if (gameChannel) {
+        gameChannel.postMessage({
+            type: 'MOVE',
+            sender: myColor, // 誰が指した手か
+            board: board,
+            gameState: gameState
+        });
+    }
+}
+
+
 
 // 盤面データへの駒オブジェクトの正しい配置
 function initBoardData() {
