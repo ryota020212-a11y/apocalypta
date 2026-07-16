@@ -30,38 +30,6 @@
         #apocalypse-banner { display: none; position: fixed; top: 50%; background: rgba(231, 76, 60, 0.9); color: white; font-size: 40px; font-weight: bold; padding: 20px 50px; border-radius: 10px; box-shadow: 0 0 30px #000; z-index: 100; animation: pulse 1s infinite alternate; }
         @keyframes pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.05); } }
         #help-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; }
-        #help-content { background:<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>終末盤面将棋 - アポカリプタ -</title>
-    <!-- オンライン通信用の外部ライブラリ -->
-    <script src="https://unpkg.com"></script>
-    <style>
-        body { background-color: #111; color: #fff; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
-        h1 { margin-bottom: 5px; color: #e74c3c; font-size: 24px; text-shadow: 0 0 10px rgba(231,76,60,0.5); }
-        #network-panel { background: #2c3e50; padding: 10px 20px; margin-bottom: 10px; border-radius: 8px; display: flex; gap: 15px; align-items: center; font-size: 13px; border: 1px solid #34495e; }
-        input { background: #34495e; color: white; border: 1px solid #1a252f; padding: 4px 8px; border-radius: 4px; }
-        button { background: #2ecc71; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #27ae60; }
-        .btn-help { background: #9b59b6 !important; } .btn-help:hover { background: #8e44ad !important; }
-        #info-panel { display: flex; gap: 20px; margin-bottom: 15px; background: #222; padding: 10px 20px; border-radius: 8px; border: 1px solid #444; font-size: 14px; }
-        .score-box { font-weight: bold; } .white-score { color: #3498db; } .black-score { color: #e67e22; }
-        #log { width: 720px; height: 60px; background: #000; border: 1px solid #333; padding: 5px; overflow-y: auto; font-size: 12px; color: #2ecc71; margin-bottom: 15px; border-radius: 4px; }
-        #board { display: grid; grid-template-columns: repeat(17, 38px); grid-template-rows: repeat(17, 38px); gap: 1px; background-color: #444; border: 4px solid #222; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
-        .cell { width: 38px; height: 38px; background-color: #333; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: bold; cursor: pointer; user-select: none; position: relative; }
-        .cell.light { background-color: #3a3a3a; } .cell.dark { background-color: #2a2a2a; }
-        .cell.destroyed { background-color: #000 !important; border: 1px solid #222; cursor: not-allowed; }
-        .cell.selected { background-color: #f1c40f !important; color: #000; }
-        .cell.movable { background-color: rgba(46, 204, 113, 0.4) !important; }
-        .cell.movable::after { content: ''; width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; position: absolute; }
-        .piece { width: 90%; height: 90%; display: flex; justify-content: center; align-items: center; border-radius: 4px; text-align: center; font-size: 10px; }
-        .piece.white { background: #2980b9; color: #fff; border: 1px solid #3498db; }
-        .piece.black { background: #c0392b; color: #fff; border: 1px solid #e74c3c; }
-        .piece.promoted { box-shadow: 0 0 8px #f1c40f; border: 1.5px solid #f1c40f !important; }
-        #apocalypse-banner { display: none; position: fixed; top: 50%; background: rgba(231, 76, 60, 0.9); color: white; font-size: 40px; font-weight: bold; padding: 20px 50px; border-radius: 10px; box-shadow: 0 0 30px #000; z-index: 100; animation: pulse 1s infinite alternate; }
-        @keyframes pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.05); } }
-        #help-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; }
         #help-content { background: #222; padding: 20px; border-radius: 10px; width: 600px; max-height: 80vh; overflow-y: auto; border: 2px solid #9b59b6; box-shadow: 0 0 20px rgba(155,89,182,0.4); }
         #help-content h2 { color: #9b59b6; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px; font-size: 20px; }
         #help-content h3 { color: #f1c40f; font-size: 14px; margin: 15px 0 5px 0; }
@@ -127,57 +95,5 @@
             initNetwork();   // 通信サーバー（PeerJS）への接続開始
         });
     </script>
-</body>
-</html> #222; padding: 20px; border-radius: 10px; width: 600px; max-height: 80vh; overflow-y: auto; border: 2px solid #9b59b6; box-shadow: 0 0 20px rgba(155,89,182,0.4); }
-        #help-content h2 { color: #9b59b6; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px; font-size: 20px; }
-        #help-content h3 { color: #f1c40f; font-size: 14px; margin: 15px 0 5px 0; }
-        #help-content p { font-size: 12px; color: #ccc; margin: 0 0 10px 0; line-height: 1.4; }
-        .close-btn { background: #e74c3c; float: right; padding: 5px 10px; font-size: 12px; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <h1>終末盤面将棋 - アポカリプタ -</h1>
-    <div id="network-panel">
-        <div>役割: <span id="my-role" style="font-weight:bold; color:#f1c40f;">1台操作モード</span></div>
-        <div>接続ID: <span id="my-id" style="font-weight:bold;">LOCAL</span></div>
-        <div>👥 接続: <input type="text" id="peer-id-input" placeholder="相手 of ID"> <button onclick="connectToPeer()">接続</button></div>
-        <button class="btn-help" onclick="openHelp()">📖 駒の説明を見る</button>
-    </div>
-    
-    <div id="info-panel">
-        <div>ターン: <span id="turn-display">1</span></div>
-        <div class="score-box">白スコア: <span id="white-score" class="white-score">0</span>/20</div>
-        <div class="score-box">黒スコア: <span id="black-score" class="black-score">0</span>/20</div>
-        <div>手番: <span id="turn-owner" style="color:#f1c40f;">白</span></div>
-        <div id="apocalypse-status" style="color:#e74c3c; font-weight:bold;"></div>
-        <div>狂信者死亡[白: <span id="white-death-display" style="color:#3498db;">0</span>/2 | 黒: <span id="black-death-display" style="color:#e74c3c;">0</span>/2]</div>
-    </div>
-
-    <div id="log">【システム】ゲームが正常に起動しました。</div>
-    <div id="board"></div>
-    <div id="apocalypse-banner">APOCALYPSE ACTIVATE</div>
-
-    <div id="help-modal">
-        <div id="help-content">
-            <button class="close-btn" onclick="closeHelp()">❌ 閉じる</button>
-            <h2>📖 駒の動かし方・ルール説明書</h2>
-            <h3>👑 魔王 (0点)</h3><p>周囲8方向に「1マス」移動・攻撃可能。取られたら敗北。</p>
-            <h3>👼 天使 (3点)</h3><p>斜め4方向へ、障害物がない限りどこまでも無限に移動・攻撃可能。</p>
-            <h3>😈 堕天使 (3点)</h3><p>周囲8方向すべてに最大「4マス」進めます（覚醒時6マス）。</p>
-            <h3>⚖️ 審問官 (2点)</h3><p>縦横4方向へ最大「6マス」進めます（覚醒時9マス）。</p>
-            <h3>🐉 龍王 (4点)</h3><p>縦方向を起点とした左右斜めを含む3列方向（面）へ最大「4マス」進めます（覚醒時6マス）。さらに自身の周囲縦横1マスにも動けます。</p>
-            <h3>🌌 星喰い (4点)</h3><p>横方向を起点とした上下斜めを含む3列方向（面）へ最大「4マス」進めます（覚醒時6マス）。さらに自身の周囲縦横1マスにも動けます。</p>
-            <h3>☠️ 死神 (3点)</h3><p>斜め4方向に最大「2マス」進めます（覚醒時3マス）。障害物を完全に無視して1マス目も2マス目も自由に着地・攻撃可能。</p>
-            <h3>🐴 騎士 (2点)</h3><p>チェスのナイトと同じ（L字型ジャンプ）。障害物を無視して跳躍可能（覚醒時距離2倍）。</p>
-            <h3>♟️ 信徒・使徒 (1点 ➔ 進化後2点)</h3>
-            <p><b>【信徒】</b>移動は正面のみ（初手だけ2マス可、空マス限定）。捕獲は斜め前1マス限定。<br><b>【狂信者】</b>信徒のルールに加え、正面1マスの敵も捕獲可能。<br><b>【凶獣】</b>狂信者の動きに加え、「左右」「後ろ」の1マスへも自由に移動・捕獲可能。<br><b>【終末の獣】</b>凶獣の動きに加え、「前後左右へ2マス先」へ障害物を無視して大ジャンプして移動・捕獲可能。</p>
-        </div>
-    </div>
-
-    <!-- 外部スクリプトの読み込み -->
-    <script src="game_part1.js"></script>
-    <script src="game_part2.js"></script>
-    <script src="game_part3.js"></script>
 </body>
 </html>
