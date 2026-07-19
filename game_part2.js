@@ -110,48 +110,68 @@ function onPieceDestroyed(p) {
 }
 
 // ==========================================
-// 【修正版】無限外周縮小システム（フリーズ・無限ループ対策）
+// 【最適化版】無限外周縮小システム（持ち駒化防止・例外対策）
 // ==========================================
 function shrinkBoard() {
     // 💡 縮小処理がすでに実行中であれば、重複して実行しないようにガードする
     if (gameState.isShrinking) return;
-    gameState.isShrinking = true;
 
     let min = gameState.minLimit;
     let max = gameState.maxLimit;
-    
-    // 重複を避けて外周の座標を厳密にリストアップ
-    let targetCells = new Set();
-    for (let i = min; i <= max; i++) {
-        targetCells.add(`${min},${i}`); // 上辺
-        targetCells.add(`${max},${i}`); // 下辺
-        targetCells.add(`${i},${min}`); // 左辺
-        targetCells.add(`${i},${max}`); // 右辺
+
+    // 💡 盤面が縮小しきっている、または不正な範囲の場合は安全のために処理しない
+    if (min >= max) {
+        logMessage("【システム】盤面はこれ以上縮小できません。");
+        return;
     }
 
-    // リストアップした外周マスの駒を処理
-    targetCells.forEach(coord => {
-        let [x, y] = coord.split(',').map(Number);
-        let p = board[y][x];
-        if (p && p !== -1) {
-            // 💡 縮小の巻き込みで死んだ狂信者は、次の縮小を引き起こさないようにフラグで守る
-            if (p.type === "信徒" && p.evolutionLevel >= 1) {
-                logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
-                // 狂信者の死亡カウントを増やさず、ただ消滅させる（連鎖フリーズを防ぐ）
-            } else {
-                onPieceDestroyed(p);
-            }
-        }
-        board[y][x] = -1;
-    });
+    gameState.isShrinking = true;
 
-    gameState.minLimit++;
-    gameState.maxLimit--;
-    
-    // 💡 縮小処理が安全に完了したので、ガードを解除する
-    gameState.isShrinking = false;
-    renderBoard();
+    try {
+        // 重複を避けて外周の座標を厳密にリストアップ
+        let targetCells = new Set();
+        for (let i = min; i <= max; i++) {
+            targetCells.add(`${min},${i}`); // 上辺
+            targetCells.add(`${max},${i}`); // 下辺
+            targetCells.add(`${i},${min}`); // 左辺
+            targetCells.add(`${i},${max}`); // 右辺
+        }
+
+        // リストアップした外周マスの駒を処理
+        targetCells.forEach(coord => {
+            let [x, y] = coord.split(',').map(Number);
+            let p = board[y][x];
+            
+            if (p && p !== -1) {
+                // 💡 狂信者（進化した信徒）とそれ以外の駒でログを出し分ける
+                if (p.type === "信徒" && p.evolutionLevel >= 1) {
+                    logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
+                } else {
+                    logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
+                    
+                    // 💡 王（勝利条件に関わる重要な駒）が巻き込まれた場合の判定のみを行う
+                    if (p.type === "王" || p.type === "王将") {
+                        // 必要に応じて、ここにゲーム終了関数などを呼び出します
+                        // checkGameEnd(p.color); 
+                    }
+                }
+                
+                // 💡 注意：誰の持ち駒にもさせないため、ここでは `onPieceDestroyed(p)` を呼び出しません。
+                // 駒の参照をここで外すことで、ゲーム上から完全に消滅（ロスト）させます。
+            }
+            board[y][x] = -1; // 進入不可マス（暗黒空間）へ変更
+        });
+
+        gameState.minLimit++;
+        gameState.maxLimit--;
+
+    } finally {
+        // 💡 処理中にエラーが発生しても、必ずガードを解除して画面を再描画する
+        gameState.isShrinking = false;
+        renderBoard();
+    }
 }
+
 
 
 // 手番（ターン）経過処理
