@@ -1,210 +1,324 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>終末盤面将棋 - アポカリプタ -</title>
-    <style>
-        /* 外枠（body）の調整：横スクロールを防ぎ、スマホでは要素を中央に */
-        body { 
-            background-color: #111; 
-            color: #fff; 
-            font-family: Arial, sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            padding: 10px; /* スマホ用に余白を少し狭く */
-            margin: 0; 
-            overflow-x: hidden; /* 画面全体の横揺れ防止 */
-        }
-        h1 { margin-bottom: 5px; color: #e74c3c; font-size: 24px; text-shadow: 0 0 10px rgba(231,76,60,0.5); text-align: center; }
-        
-        /* ネットワークパネル、情報パネル、ログの幅を画面幅に合わせる */
-        #network-panel, #info-panel, #log {
-            width: 95%;
-            max-width: 720px;
-            box-sizing: border-box;
-        }
+// ==========================================
+// 【中編：game_part2.js】画面描画・進行・外周消滅
+// ==========================================
 
-        /* ネットワークパネルをスマホでは縦並び、PCでは横並びに自動切替 */
-        #network-panel { 
-            background: #2c3e50; 
-            padding: 10px 15px; 
-            margin-bottom: 10px; 
-            border-radius: 8px; 
-            display: flex; 
-            flex-wrap: wrap; /* スマホで入り切らない場合に入り切るよう折り返す */
-            gap: 10px; 
-            align-items: center; 
-            font-size: 13px; 
-            border: 1px solid #34495e; 
-        }
-        input { background: #34495e; color: white; border: 1px solid #1a252f; padding: 4px 8px; border-radius: 4px; }
-        button { background: #2ecc71; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #27ae60; }
-        .btn-help { background: #9b59b6 !important; } .btn-help:hover { background: #8e44ad !important; }
-        
-        /* 情報パネルもスマホで折り返せるように変更 */
-        #info-panel { 
-            display: flex; 
-            flex-wrap: wrap; /* スマホ対応 */
-            gap: 10px; 
-            margin-bottom: 15px; 
-            background: #222; 
-            padding: 10px 15px; 
-            border-radius: 8px; 
-            border: 1px solid #444; 
-            font-size: 13px; 
-        }
-        .score-box { font-weight: bold; } .white-score { color: #3498db; } .black-score { color: #e67e22; }
-        
-        /* ログの固定幅（720px）を解除し、レスポンシブ化 */
-        #log { 
-            height: 60px; 
-            background: #000; 
-            border: 1px solid #333; 
-            padding: 5px; 
-            overflow-y: auto; 
-            font-size: 12px; 
-            color: #2ecc71; 
-            margin-bottom: 15px; 
-            border-radius: 4px; 
-        }
-        
-        /* 🔥 【重要】盤面をスマホの画面幅に合わせて自動縮小させる設定 */
-        #board { 
-            display: grid; 
-            grid-template-columns: repeat(17, 1fr); /* 固定幅(38px)ではなく、均等に割る設定に変更 */
-            grid-template-rows: repeat(17, 1fr); 
-            gap: 1px; 
-            background-color: #444; 
-            border: 4px solid #222; 
-            box-shadow: 0 0 20px rgba(0,0,0,0.8); 
-            
-            /* 横幅を画面いっぱいに（最大650px） */
-            width: 95vw; 
-            max-width: 650px; 
-            /* 縦横比を1:1に保つ（マス目を正方形にする） */
-            aspect-ratio: 1 / 1; 
-        }
-        
-        /* 🔥 【重要】マスの大きさを画面幅に連動 */
-        .cell { 
-            width: 100%;  /* #boardの1frに合わせて自動伸縮 */
-            height: 100%; /* #boardの1frに合わせて自動伸縮 */
-            background-color: #333; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            /* 文字サイズはスマホだとかなり小さくなるため自動計算 */
-            font-size: calc(2vw + 2px); 
-            font-weight: bold; 
-            cursor: pointer; 
-            user-select: none; 
-            position: relative; 
-        }
-        .cell.light { background-color: #3a3a3a; } .cell.dark { background-color: #2a2a2a; }
-        .cell.destroyed { background-color: #000 !important; border: 1px solid #222; cursor: not-allowed; }
-        .cell.selected { background-color: #f1c40f !important; color: #000; }
-        .cell.movable { background-color: rgba(46, 204, 113, 0.4) !important; }
-        .cell.movable::after { content: ''; width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; position: absolute; }
-        
-        /* 駒の文字サイズも画面幅に合わせて自動調整 */
-        .piece { 
-            width: 90%; 
-            height: 90%; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            border-radius: 4px; 
-            text-align: center; 
-            font-size: calc(1.8vw + 1px); 
-        }
-        .piece.white { background: #2980b9; color: #fff; border: 1px solid #3498db; }
-        .piece.black { background: #c0392b; color: #fff; border: 1px solid #e74c3c; }
-        .piece.promoted { box-shadow: 0 0 8px #f1c40f; border: 1.5px solid #f1c40f !important; }
-        
-        /* PCなどの大画面では文字やマスが大きくなりすぎないよう制限（メディアクエリ） */
-        @media (min-width: 650px) {
-            .cell { font-size: 11px; }
-            .piece { font-size: 10px; }
-        }
+// 盤面とデータを画面に組み立てる
+function renderBoard() {
+    const boardEl = document.getElementById('board');
+    if (!boardEl) return;
+    boardEl.innerHTML = '';
 
-        #apocalypse-banner { display: none; position: fixed; top: 50%; background: rgba(231, 76, 60, 0.9); color: white; font-size: 40px; font-weight: bold; padding: 20px 50px; border-radius: 10px; box-shadow: 0 0 30px #000; z-index: 100; animation: pulse 1s infinite alternate; }
-        @keyframes pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.05); } }
-        #help-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; }
-        
-        /* ヘルプ画面もスマホの画面内に収める */
-        #help-content { 
-            background: #222; 
-            padding: 20px; 
-            border-radius: 10px; 
-            width: 90%; /* 固定幅(600px)から％に変更 */
-            max-width: 600px; 
-            max-height: 80vh; 
-            overflow-y: auto; 
-            border: 2px solid #9b59b6; 
-            box-shadow: 0 0 20px rgba(155,89,182,0.4); 
+    for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+            let cellEl = document.createElement('div');
+            let d = board[y][x];
+            cellEl.className = `cell ${(x + y) % 2 === 0 ? 'light' : 'dark'}`;
+            cellEl.dataset.x = x;
+            cellEl.dataset.y = y;
+
+            if (d === -1) {
+                cellEl.classList.add('destroyed');
+            } else if (d !== 0) {
+                let pEl = document.createElement('div');
+                pEl.className = `piece ${d.color}`;
+                pEl.innerText = d.type === "信徒" ? ["信徒", "狂信者", "凶獣", "終末獣"][d.evolutionLevel] : d.type;
+                if (d.evolutionLevel >= 1) pEl.classList.add('promoted');
+                cellEl.appendChild(pEl);
+            }
+            cellEl.addEventListener('click', () => onCellClick(x, y));
+            boardEl.appendChild(cellEl);
         }
-        #help-content h2 { color: #9b59b6; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px; font-size: 20px; }
-        #help-content h3 { color: #f1c40f; font-size: 14px; margin: 15px 0 5px 0; }
-        #help-content p { font-size: 12px; color: #ccc; margin: 0 0 10px 0; line-height: 1.4; }
-        .close-btn { background: #e74c3c; float: right; padding: 5px 10px; font-size: 12px; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <h1>終末盤面将棋 - アポカリプタ -</h1>
-    <div id="network-panel">
-        <div>役割: <span id="my-role" style="font-weight:bold; color:#f1c40f;">未接続（1台操作）</span></div>
-        <div>🔑 部屋名: <input type="text" id="room-id-input" placeholder="例: room123" style="width:100px;"> 
-            <button onclick="connectToRoom('white')" style="background:#3498db;">白でプレイ</button>
-            <button onclick="connectToRoom('black')" style="background:#e67e22;">黒でプレイ</button>
-        </div>
-        <button class="btn-help" onclick="openHelp()">📖 駒の説明を見る</button>
-    </div>
+    }
 
-    <div id="info-panel">
-        <div>ターン: <span id="turn-display">1</span></div>
-        <div class="score-box">白スコア: <span id="white-score" class="white-score">0</span>/20</div>
-        <div class="score-box">黒スコア: <span id="black-score" class="black-score">0</span>/20</div>
-        <div>手番: <span id="turn-owner" style="color:#f1c40f;">白</span></div>
-        <div id="apocalypse-status" style="color:#e74c3c; font-weight:bold;"></div>
-        <div>狂信者死亡[白: <span id="white-death-display" style="color:#3498db;">0</span>/2 | 黒: <span id="black-death-display" style="color:#e74c3c;">0</span>/2]</div>
-    </div>
-
-    <div id="log">【システム】ゲームが正常に起動しました。</div>
-    <div id="board"></div>
-    <div id="apocalypse-banner">APOCALYPSE ACTIVATE</div>
-
-    <div id="help-modal">
-        <div id="help-content">
-            <button class="close-btn" onclick="closeHelp()">❌ 閉じる</button>
-            <h2>📖 駒の動かし方・ルール説明書</h2>
-            <h3>👑 魔王 (0点)</h3><p>周囲8方向に「1マス」移動・攻撃可能。取られたら敗北。</p>
-            <h3>👼 天使 (3点)</h3><p>斜め4方向へ、障害物がない限りどこまでも無限に移動・攻撃可能。</p>
-            <h3>😈 堕天使 (3点)</h3><p>周囲8方向すべてに最大「4マス」進めます（覚醒時6マス）。</p>
-            <h3>⚖️ 審問官 (2点)</h3><p>縦横4方向へ最大「6マス」進めます（覚醒時9マス）。</p>
-            <h3>🐉 龍王 (4点)</h3><p>縦方向を起点とした左右斜めを含む3列方向（面）へ最大「4マス」進めます（覚醒時6マス）。さらに自身の周囲縦横1マスにも動けます。</p>
-            <h3>🌌 星喰い (4点)</h3><p>横方向を起点とした上下斜めを含む3列方向（面）へ最大「4マス」進めます（覚醒時6マス）。さらに自身の周囲縦横1マスにも動けます。</p>
-            <h3>☠️ 死神 (3点)</h3><p>斜め4方向に最大「2マス」進めます（覚醒時3マス）。障害物を完全に無視して1マス目も2マス目も自由に着地・攻撃可能。</p>
-            <h3>🐴 騎士 (2点)</h3><p>チェスのナイトと同じ（L字型ジャンプ）。障害物を無視して跳躍可能（覚醒時距離2倍）。</p>
-            <h3>♟️ 信徒・使徒 (1点 ➔ 進化後2点)</h3>
-            <p><b>【信徒】</b>移動は正面のみ（初手だけ2マス可、空マス限定）。捕獲は斜め前1マス限定。<br><b>【狂信者】</b>信徒のルールに加え、正面1マスの敵も捕獲可能。<br><b>【凶獣】</b>狂信者の動きに加え、「左右」「後ろ」の1マスへも自由に移動・捕獲可能。<br><b>【終末の獣】</b>凶獣の動きに加え、「前後左右へ2マス先」へ障害物を無視して大ジャンプして移動・捕獲可能。</p>
-        </div>
-    </div>
-
-    <!-- 外部スクリプトの読み込み -->
-    <script src="game_part1.js"></script>
-    <script src="game_part2.js"></script>
-    <script src="game_part3.js"></script>
-
-    <script>
-        // 💡 HTML側で全ての初期化処理を確実に1回だけ実行する
-        window.addEventListener('DOMContentLoaded', () => {
-            initBoardData(); // 盤面データの初期化
-            renderBoard();   // 盤面の初回描画
-            initNetwork();   // 通信サーバー（PeerJS）への接続開始
+    // UIテキスト情報の上書き更新
+    document.getElementById('turn-display').innerText = gameState.currentTurn;
+    document.getElementById('white-score').innerText = gameState.playerScores.white;
+    document.getElementById('black-score').innerText = gameState.playerScores.black;
+    document.getElementById('turn-owner').innerText = gameState.turnOwner === 'white' ? '白' : '黒';
+    document.getElementById('white-death-display').innerText = gameState.deadEliteBelievers.white;
+    document.getElementById('black-death-display').innerText = gameState.deadEliteBelievers.black;
+    document.getElementById('apocalypse-status').innerText = gameState.isApocalypseMode ? `【覚醒中 残り${gameState.apocalypseTimer}T】` : "";
+    // 💡 【追加】持ち駒用UIエレメントがなければHTMLに自動作成
+    let reserveEl = document.getElementById('reserve-panel');
+    if (!reserveEl) {
+        reserveEl = document.createElement('div');
+        reserveEl.id = 'reserve-panel';
+        reserveEl.style.cssText = "margin-top:15px; background:#222; padding:10px; border-radius:8px; border:1px solid #444; width:720px; display:flex; gap:10px; justify-content:center; align-items:center; font-size:13px;";
+        document.body.appendChild(reserveEl);
+    }
+    
+    // 持ち駒UIの描画リフレッシュ
+    reserveEl.innerHTML = `<div>【持ち駒】</div>`;
+    let currentReserves = gameState.capturedPieces[gameState.turnOwner];
+    
+    if (currentReserves.length === 0) {
+        reserveEl.innerHTML += `<div style="color:#666;">（なし）</div>`;
+    } else {
+        currentReserves.forEach((piece, index) => {
+            let pBtn = document.createElement('button');
+            pBtn.innerText = piece.type;
+            pBtn.style.cssText = "background:#34495e; border:1px solid #555; padding:4px 8px; color:white; border-radius:4px; cursor:pointer;";
+            // 💡 現在選択中の持ち駒ならハイライト
+            if (selectedCell && selectedCell[0] === 'reserve' && selectedCell[1] === index) {
+                pBtn.style.background = "#f1c40f";
+                pBtn.style.color = "#000";
+            }
+            pBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // 盤面クリックとの衝突防止
+                onReserveClick(index);
+            });
+            reserveEl.appendChild(pBtn);
         });
-    </script>
-</body>
-</html>
+    }
+}
+
+function inBounds(x, y) {
+    return x >= gameState.minLimit && x <= gameState.maxLimit && y >= gameState.minLimit && y <= gameState.maxLimit;
+}
+
+// 駒が死亡した時のスコア計算・ゲーム終了処理
+function onPieceDestroyed(p) {
+    if (!p || p === -1) return;
+    logMessage(`【撃破】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が消滅しました。`);
+
+    if (p.type === "魔王") {
+        gameState.gameActive = false;
+        alert(`${p.color === 'white' ? '黒' : '白'}の勝利！魔王が消滅しました。`);
+        return;
+    }
+
+    // 💡 【追加】倒した駒を持ち駒に加える（狂信者以上の場合はレベル0の「信徒」に戻す）
+    if (gameState.gameActive) {
+        let captured = {
+            type: p.type,
+            color: gameState.turnOwner, // 💡 所有権を「倒した側」の色に変える
+            evolutionLevel: p.type === "信徒" ? 0 : 0, // 信徒はレベル0にリセット
+            hasMoved: false
+        };
+        gameState.capturedPieces[gameState.turnOwner].push(captured);
+        logMessage(`【持ち駒】${gameState.turnOwner === 'white' ? '白' : '黒'}が[${p.type}]を鹵獲しました。`);
+    }
+
+    if (p.type === "信徒" && p.evolutionLevel >= 1) {
+        gameState.deadEliteBelievers[p.color]++;
+        if (gameState.deadEliteBelievers[p.color] >= 2) {
+            logMessage(`【連鎖崩壊】${p.color === 'white' ? '白' : '黒'}の狂信者が2体死亡したため外周縮小！`);
+            shrinkBoard();
+            gameState.deadEliteBelievers[p.color] = 0;
+        }
+    }
+}
+
+// ==========================================
+// 【最適化版】無限外周縮小システム（持ち駒化防止・例外対策）
+// ==========================================
+function shrinkBoard() {
+    // 💡 縮小処理がすでに実行中であれば、重複して実行しないようにガードする
+    if (gameState.isShrinking) return;
+
+    let min = gameState.minLimit;
+    let max = gameState.maxLimit;
+
+    // 💡 盤面が縮小しきっている、または不正な範囲の場合は安全のために処理しない
+    if (min >= max) {
+        logMessage("【システム】盤面はこれ以上縮小できません。");
+        return;
+    }
+
+    gameState.isShrinking = true;
+
+    try {
+        // 重複を避けて外周の座標を厳密にリストアップ
+        let targetCells = new Set();
+        for (let i = min; i <= max; i++) {
+            targetCells.add(`${min},${i}`); // 上辺
+            targetCells.add(`${max},${i}`); // 下辺
+            targetCells.add(`${i},${min}`); // 左辺
+            targetCells.add(`${i},${max}`); // 右辺
+        }
+
+        // リストアップした外周マスの駒を処理
+        targetCells.forEach(coord => {
+            let [x, y] = coord.split(',').map(Number);
+            let p = board[y][x];
+            
+            if (p && p !== -1) {
+                // 💡 狂信者（進化した信徒）とそれ以外の駒でログを出し分ける
+                if (p.type === "信徒" && p.evolutionLevel >= 1) {
+                    logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
+                } else {
+                    logMessage(`【外周消滅】${p.color === 'white' ? '白' : '黒'}の[${p.type}]が暗黒空間に呑まれました。`);
+                    
+                    // 💡 王（勝利条件に関わる重要な駒）が巻き込まれた場合の判定のみを行う
+                    if (p.type === "王" || p.type === "王将") {
+                        // 必要に応じて、ここにゲーム終了関数などを呼び出します
+                        // checkGameEnd(p.color); 
+                    }
+                }
+                
+                // 💡 注意：誰の持ち駒にもさせないため、ここでは `onPieceDestroyed(p)` を呼び出しません。
+                // 駒の参照をここで外すことで、ゲーム上から完全に消滅（ロスト）させます。
+            }
+            board[y][x] = -1; // 進入不可マス（暗黒空間）へ変更
+        });
+
+        gameState.minLimit++;
+        gameState.maxLimit--;
+
+    } finally {
+        // 💡 処理中にエラーが発生しても、必ずガードを解除して画面を再描画する
+        gameState.isShrinking = false;
+        renderBoard();
+    }
+}
+
+
+
+// 手番（ターン）経過処理
+function advanceTurn() {
+    gameState.currentTurn++;
+    gameState.turnOwner = (gameState.turnOwner === 'white') ? 'black' : 'white';
+
+    if (gameState.isApocalypseMode && --gameState.apocalypseTimer === 0) {
+        gameState.isApocalypseMode = false;
+        logMessage("アポカリプス終了。通常の性能に戻りました。");
+    }
+
+    if (gameState.apocalypseTriggeredTurn > 0 && gameState.currentTurn === gameState.apocalypseTriggeredTurn + 4) {
+        logMessage(`【天災】20点到達から4ターン経過したため、定期外周縮小が発生！`);
+        shrinkBoard();
+    }
+    renderBoard();
+}
+
+// マスクリック・移動・スコア完全加算処理
+// ==========================================
+// 【修正】onCellClick の先頭部分（通信・持ち駒エラーの解消）
+// ==========================================
+function onCellClick(x, y) {
+    if (!gameState.gameActive) return;
+
+// 💡 game_part2.js 内の onCellClick(x, y) の先頭にある3行を以下に書き換え
+if (gameChannel && gameState.turnOwner !== myColor) {
+    logMessage("【警告】相手の手番です。");
+    return;
+}
+
+    // 💡 持ち駒を盤面に「打つ」時の配置処理（判定エラーの修正）
+    if (selectedCell && selectedCell[0] === 'reserve') {
+        if (movableCells.some(([mx, my]) => mx === x && my === y)) {
+            let reserveIndex = selectedCell[1];
+            let piece = gameState.capturedPieces[gameState.turnOwner][reserveIndex];
+            
+            board[y][x] = piece;
+            gameState.capturedPieces[gameState.turnOwner].splice(reserveIndex, 1);
+            
+            selectedCell = null;
+            movableCells = [];
+            logMessage(`【配置】[${piece.type}]を盤面に召喚しました。`);
+            
+            advanceTurn();
+            sendMove();
+            return;
+        }
+    }
+
+    // 💡 通常の駒の移動処理（selectedCellが配列のときだけ判定するようにガード）
+    if (Array.isArray(selectedCell) && selectedCell[0] !== 'reserve' && movableCells.some(([mx, my]) => mx === x && my === y)) {
+        let [sx, sy] = selectedCell;
+        let p = board[sy][sx];
+        let t = board[y][x];
+
+        if (t && t !== -1) {
+            let scoreValue = (t.type === "信徒" && t.evolutionLevel >= 1) ? 2 : PIECE_SCORES[t.type];
+            gameState.playerScores[gameState.turnOwner] += scoreValue;
+            onPieceDestroyed(t);
+
+            if (gameState.playerScores[gameState.turnOwner] >= 20) {
+                gameState.isApocalypseMode = true;
+                gameState.apocalypseTimer = 3;
+                gameState.apocalypseTriggeredTurn = gameState.currentTurn;
+                gameState.playerScores[gameState.turnOwner] = 0; 
+                
+                for (let r of board) {
+                    for (let c of r) {
+                        if (c && c.type === "信徒" && c.evolutionLevel === 0 && c.color === gameState.turnOwner) {
+                            c.evolutionLevel = 1;
+                        }
+                    }
+                }
+                logMessage(`【アポカリプス発動】3手限定の全体覚醒！${gameState.turnOwner === 'white' ? '白' : '黒'}のスコアが0にリセットされました。`);
+            }
+        }
+
+        p.hasMoved = true;
+        board[y][x] = p;
+        board[sy][sx] = 0;
+        selectedCell = null;
+        movableCells = [];
+
+        advanceTurn();
+        sendMove();
+        return;
+    }
+
+    // 駒の選択処理
+    let c = board[y][x];
+    if (c && c !== -1 && c.color === gameState.turnOwner) {
+        selectedCell = [x, y];
+        movableCells = getMovableCells(x, y);
+        renderBoard();
+        document.querySelector(`[data-x='${x}'][data-y='${y}']`).classList.add('selected');
+        movableCells.forEach(([mx, my]) => {
+            document.querySelector(`[data-x='${mx}'][data-y='${my}']`)?.classList.add('movable');
+        });
+    } else {
+        selectedCell = null;
+        movableCells = [];
+        renderBoard();
+    }
+}
+
+function onReserveClick(index) {
+    if (!gameState.gameActive) return;
+    if (peer && conn && conn.open && gameState.turnOwner !== myColor) return;
+
+    // すでに選択中なら解除、そうでなければ選択
+    if (selectedCell && selectedCell[0] === 'reserve' && selectedCell[1] === index) {
+        selectedCell = null;
+        movableCells = [];
+        renderBoard();
+        return;
+    }
+
+    selectedCell = ['reserve', index];
+    movableCells = [];
+
+    // 💡 「真ん中（y=8）よりも自陣側」かつ「空マス」かつ「消滅していないマス」を打てるマスとしてリストアップ
+    // 白(white)は下半分（yが9〜16）、黒(black)は上半分（yが0〜7）
+    for (let y = gameState.minLimit; y <= gameState.maxLimit; y++) {
+        for (let x = gameState.minLimit; x <= gameState.maxLimit; x++) {
+            if (board[y][x] === 0) { // 空マス限定
+                if (gameState.turnOwner === 'white' && y >= 9) {
+                    movableCells.push([x, y]);
+                } else if (gameState.turnOwner === 'black' && y <= 7) {
+                    movableCells.push([x, y]);
+                }
+            }
+        }
+    }
+
+    renderBoard();
+
+    // 打てるマスを緑色にハイライト
+    movableCells.forEach(([mx, my]) => {
+        document.querySelector(`[data-x='${mx}'][data-y='${my}']`)?.classList.add('movable');
+    });
+}
+function logMessage(m) {
+    let el = document.getElementById('log');
+    if (el) {
+        el.innerHTML += `<div>${m}</div>`;
+        el.scrollTop = el.scrollHeight;
+    }
+}
